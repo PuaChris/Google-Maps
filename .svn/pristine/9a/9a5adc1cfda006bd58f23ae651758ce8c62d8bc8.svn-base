@@ -1,0 +1,226 @@
+/* Performance results (ID: 408) http://ug251.eecg.utoronto.ca/ece297s/contest_2018/
+ * M4 Quality of Result (QoR)        Percent Difference to Best         Percent Difference to Previous      ta_bad?     ta_good?                    Algorithm used                
+ *55       98793.636                           25.03 %                                0.68 %                    No           No      Greedy algo (go to all pickups then all drop offs) 
+ *53       96152.368                           21.69 %                                0.41 %                    No           No      Greedy algo (Option to either go to pickup or dropoff)
+ *31       92538.772                           17.12 %                                0.0 %                     Yes          No      Greedy algo with multi-start on depots
+ */
+
+//ideas:
+//include hashtable
+//when encountering a pickup, push onto hash table
+//when encountering a drop-off, check hash table, if pickup is present, legal and pop it off, if not present, illegal
+
+
+
+/* exiting before finding a path to the last node to visit. Undo changes and test this out 
+ */
+
+/*          for testing purposes
+ *         deliveries = {DeliveryInfo(9140, 19741), DeliveryInfo(67133, 63045)};
+        depots = {24341, 84950};
+ */
+#include "m3.h"
+#include "m4.h"
+#include "math.h"
+#include <vector>
+#include "utilities.h"
+#include "StreetsDatabaseAPI.h"
+#include "two_opt.h"
+#include "test_path.h"
+
+bool compare_points(std::pair <double, DeliveryPoint> point1, std::pair <double, DeliveryPoint> point2) {
+    return point1.first > point2.first;
+}
+
+std::vector<unsigned> traveling_courier_greedy(const std::vector<DeliveryInfo>& deliveries,
+        const std::vector<unsigned>& depots,
+        const float turn_penalty) {
+
+    // Best of all depot starts
+    std::vector<StreetSegmentIndex> best_path_ss;
+    std::vector<DeliveryPoint> best_path_inters;
+    double best_path_time = FLT_MAX;
+
+
+    // Populate delivery_points (all pickups and drop-offs, no depots) 
+    std::vector<std::pair<DeliveryPoint, DeliveryPoint >> delivery_points(deliveries.size());
+    for (unsigned i = 0; i < deliveries.size(); ++i) {
+        DeliveryPoint pickup_point(i, true, deliveries[i].pickUp);
+        DeliveryPoint dropoff_point(i, false, deliveries[i].dropOff);
+        delivery_points[i] = std::make_pair(pickup_point, dropoff_point);
+    }
+
+    //construct vector of depots
+    std::vector<DeliveryPoint> depot_points(depots.size());
+    for (unsigned i = 0; i < depots.size(); ++i) {
+        DeliveryPoint depot_insert(DEPOT_ID, false, depots[i]);
+        depot_points[i] = depot_insert;
+    }
+
+
+
+
+    // multi start - for each depot
+    for (DeliveryPoint depot_point : depot_points) {
+        std::vector<DeliveryPoint> path_inters;
+        std::vector<DeliveryPoint> nodes_to_visit;
+
+        path_inters.push_back(depot_point);
+        DeliveryPoint current_intersection = depot_point;
+
+        for (std::pair<DeliveryPoint, DeliveryPoint> delivery_point : delivery_points) {
+            nodes_to_visit.push_back(delivery_point.first);
+        }
+
+
+
+
+
+        // Keep looping while there are still nodes to visit (pickups/dropoffs)
+        while (!nodes_to_visit.empty()) {
+
+            // Priority queue to get the closest next intersection
+            std::priority_queue < std::pair<double, DeliveryPoint>,
+                    std::vector <std::pair<double, DeliveryPoint>>,
+                    std::function<bool (std::pair<double, DeliveryPoint>, std::pair<double, DeliveryPoint>) >> next_intersection_front(compare_points);
+
+            // Populate next_intersection_front with distances to nodes to visit
+            for (DeliveryPoint next_intersection : nodes_to_visit) {
+                double distance = find_distance_between_two_points(
+                        getIntersectionPosition(current_intersection.intersectionID),
+                        getIntersectionPosition(next_intersection.intersectionID));
+                next_intersection_front.push(std::make_pair(distance, next_intersection));
+            }
+
+
+
+            
+            // Find the closest reachable next intersection
+            std::vector<StreetSegmentIndex> next_inter_path;
+            DeliveryPoint next_intersection;
+            
+            // While we have not found a reachable next intersection
+            while (next_inter_path.empty() && !next_intersection_front.empty()) {
+                next_intersection = next_intersection_front.top().second;
+                next_intersection_front.pop();
+
+                next_inter_path = find_path_between_intersections(current_intersection.intersectionID, next_intersection.intersectionID, turn_penalty);
+            }
+            
+            // If none of the next intersection candidates can be reached, stop checking the path for this start depot
+            if (next_inter_path.empty()) {
+                path_inters.clear();
+                break;
+            }
+
+
+
+            
+            
+            // If the current intersection is a pickup and there are pickups remaining
+            // Loop through all delivery pairs with this pickup location, deleting the pickups and adding the dropoffs to nodes to visit
+            if (next_intersection.pickUp) {
+                for (std::pair<DeliveryPoint, DeliveryPoint> delivery_pair : delivery_points) {
+                    if (next_intersection.intersectionID == delivery_pair.first.intersectionID) {
+                        nodes_to_visit.push_back(delivery_pair.second);
+
+                        // Remove all pickups at the same location
+                        nodes_to_visit.erase(std::remove(nodes_to_visit.begin(), nodes_to_visit.end(), delivery_pair.first), nodes_to_visit.end());
+                    }
+                }
+            }
+            
+            nodes_to_visit.erase(std::remove(nodes_to_visit.begin(), nodes_to_visit.end(), next_intersection), nodes_to_visit.end());
+            
+            path_inters.push_back(next_intersection);
+            current_intersection = next_intersection;
+        }
+
+        if (path_inters.empty()) {
+            continue;
+        }
+
+
+        
+        
+        // Finding end depot
+        // Priority queue to find the closest end depot
+        std::priority_queue < std::pair<double, DeliveryPoint>,
+                std::vector <std::pair<double, DeliveryPoint>>,
+                std::function<bool (std::pair<double, DeliveryPoint>, std::pair<double, DeliveryPoint>) >> end_depot_front(compare_points);
+        
+        // Populate end depots
+        for (DeliveryPoint end_depot : depot_points) {
+            double distance = find_distance_between_two_points(
+                    getIntersectionPosition(current_intersection.intersectionID),
+                    getIntersectionPosition(end_depot.intersectionID));
+
+            end_depot_front.push(std::make_pair(distance, end_depot));
+        }
+
+        
+        // Find the closest reachable end depot
+        std::vector<StreetSegmentIndex> end_depot_path;
+        DeliveryPoint end_depot;
+        
+        // While we have not found a reachable end depot
+        while (end_depot_path.empty() && !end_depot_front.empty()) {
+            end_depot = end_depot_front.top().second;
+            end_depot_front.pop();
+
+            end_depot_path = find_path_between_intersections(current_intersection.intersectionID, end_depot.intersectionID, turn_penalty);
+        }
+
+        // If there is no valid path to any end depot
+        if (end_depot_path.empty()) {
+            continue;
+        }
+        
+        path_inters.push_back(end_depot);
+
+
+
+        // Construct path of street segments
+        std::vector<StreetSegmentIndex> path_ss;
+        for (int i = 0; i < path_inters.size() - 1; ++i) {
+            std::vector<StreetSegmentIndex> subpath = find_path_between_intersections(path_inters[i].intersectionID, path_inters[i + 1].intersectionID, turn_penalty);
+            path_ss.insert(path_ss.end(), subpath.begin(), subpath.end());
+        }
+        
+        double path_time = compute_path_travel_time(path_ss, turn_penalty);
+        if (!path_ss.empty() && path_time < best_path_time) {
+            best_path_time = path_time;
+            best_path_ss = path_ss;
+            best_path_inters = path_inters;
+        }
+
+    }
+
+
+    //    std::vector<IntersectionIndex> intersections_no_depots = best_intersections;
+    //    IntersectionIndex start_depot = *intersections_no_depots.begin();
+    //    IntersectionIndex end_depot = *(intersections_no_depots.end() - 1);
+    //    intersections_no_depots.erase(intersections_no_depots.begin());
+    //    intersections_no_depots.erase(intersections_no_depots.end() - 1);
+    //    
+    //    Path path(intersections_no_depots);
+    //    Path new_path = TwoOpt(path);
+    //    std::vector<IntersectionIndex> new_path_int = new_path.path;
+    //    new_path_int.insert(new_path_int.begin(), start_depot);
+    //    new_path_int.push_back(end_depot);
+    //    std::vector<unsigned> new_path_ss = convert_inter_to_street_seg(new_path_int);
+    //
+    //    return new_path_ss;
+
+    return best_path_ss;
+}
+
+std::vector<unsigned> traveling_courier(const std::vector<DeliveryInfo>& deliveries,
+        const std::vector<unsigned>& depots,
+        const float turn_penalty) {
+//    return traveling_courier_greedy(deliveries, depots, turn_penalty);
+        test();
+        return std::vector<unsigned>();
+}
+
+

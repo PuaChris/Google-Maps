@@ -1,0 +1,326 @@
+#include <vector>
+#include <unordered_map>
+#include "m1.h"
+#include "two_opt.h"
+
+//
+//void two_opt(std::vector<unsigned> path){
+//    //determine what to cut: the longest 2 edges
+//    //loop thru entire vector, keep track of 2 longest
+//    double longest_distance = 0;
+//    double second_longest_dist = 0;
+//    unsigned index1, index2;
+//
+//    for(int i = 0; i < path.size()-1; i++){
+//        double dist = find_distance(path[i],path[i+1]);
+//        if (dist>longest_distance){
+//            second_longest_dist = longest_distance;
+//            index2 = index1;
+//            longest_distance = dist;
+//            index1 = i;
+//        }
+//        else if(dist > second_longest_dist){
+//            second_longest_dist = dist;
+//            index2 = i;
+//        }
+//    }
+//
+//    //establish the 6 nodes of interest
+//    unsigned node1 = path.front();
+//    unsigned node2 = path[index1];
+//    unsigned node3 = path[index1 + 1];
+//    unsigned node4 = path[index2];
+//    unsigned node5 = path[index1 + 1];
+//    unsigned node6 = path.back();
+//
+//    //draw 2 lines from 6 vertices
+//    for()
+//    //pick 2 pairs of vertices
+//
+//    //compute time
+//
+//    //if less than orginal and legal, insert into priority queue
+//
+//    //for top three, calculate actual time
+//
+//    //pickest the shortest one
+//}
+
+//// Do all 2-opt combinations
+//Path& TwoOpt(Path& path_intersections){
+//    // Get path size
+//    int size = path_intersections.pathSize();
+// 
+//    // repeat until no improvement is made 
+//    int improve = 0;
+// 
+//    while ( improve < 20 ){
+// 
+//        double best_difference = 0;
+//        
+//        for ( int i = 0; i < size - 1; i++ ) {
+//            
+//            for ( int k = i + 1; k < size; k++) {
+//                
+//                double difference;
+//                
+//                //same path but reversed, skip
+//                if (i == 0 && k == size-1)
+//                    difference = 0;
+//                
+//                else {
+//                    double original_distance = (i == 0? 0:find_distance_btw_intersections(path_intersections.path[i-1],path_intersections.path[i])) 
+//                                              + ((k == size-1)? 0: find_distance_btw_intersections(path_intersections.path[k],path_intersections.path[k+1]));
+//                
+//                    double new_distance = (i == 0? 0: find_distance_btw_intersections(path_intersections.path[i-1],path_intersections.path[k])) 
+//                                              + ((k == size-1)? 0: find_distance_btw_intersections(path_intersections.path[i],path_intersections.path[k+1]));
+//                
+//                    difference = new_distance - original_distance;
+//                }
+// 
+//                if ( difference < best_difference ) {
+//                    
+//                    // Improvement found so reset
+//                    improve = 0;
+//                    best_difference = difference;
+//                    Path new_path = TwoOptSwap (i, k, path_intersections);
+//                    path_intersections = new_path;
+//                }
+//            }
+//        }
+// 
+//        improve ++;
+//    }
+//    
+//    return path_intersections;
+//}
+
+// Do all 2-opt combinations
+//path is now a vector of DeliveryPoints
+Path& TwoOpt(Path& path_intersections){
+    // Get path size
+    int size = path_intersections.pathSize();
+ 
+    std::cout<< "size = " << size << std::endl;
+    // repeat until no improvement is made 
+    int improve = 0;
+ 
+    while ( improve < 20 ){
+ 
+        double best_difference = 0;
+        
+        //start from i = 2 so that we don't modify the depot and the first pickup
+        for ( int i = 2; i < size - 3; i++ ) {
+            
+            //end at k = end - 2 so that we don't modify the last drop-off and the ending depot
+            for ( int k = i + 1; k < size - 2; k++) {
+                
+                double difference;
+                
+                //same path but reversed, skip
+                if (i == 0 && k == size - 1)
+                    difference = 0;
+                
+                else {
+//                    double original_distance = (i == 0? 0:find_distance_btw_delivery_points(path_intersections.path[i-1],path_intersections.path[i])) 
+//                                              + ((k == size-1)? 0: find_distance_btw_delivery_points(path_intersections.path[k],path_intersections.path[k+1]));
+//                
+//                    double new_distance = (i == 0? 0: find_distance_btw_delivery_points(path_intersections.path[i-1],path_intersections.path[k])) 
+//                                              + ((k == size-1)? 0: find_distance_btw_delivery_points(path_intersections.path[i],path_intersections.path[k+1]));
+                    
+                    double original_distance = find_distance_btw_delivery_points(path_intersections.path[i-1],path_intersections.path[i]) 
+                                             + find_distance_btw_delivery_points(path_intersections.path[k],path_intersections.path[k+1]);
+                    
+                    std::cout<< "the original difference is " << original_distance << std::endl;
+                    
+                    double new_distance = find_distance_btw_delivery_points(path_intersections.path[i-1],path_intersections.path[k])
+                                        + find_distance_btw_delivery_points(path_intersections.path[i],path_intersections.path[k+1]);
+                    
+                    std::cout<< "the new difference is " << new_distance << std::endl;
+                    
+                    difference = new_distance - original_distance;
+                }
+                
+                std::cout<< improve <<  "th iteration" <<  std::endl;
+                std::cout<< "i = " << i << ", k = " << k << std::endl;
+                std::cout<< "the difference is " << difference << std::endl;
+                
+                //if new path is shorter than old path
+                if ( difference < best_difference ) {
+                    
+                    std::cout<< "Found a better path!" << std::endl;
+                    
+                    //check if new path is legal
+                    Path new_path = TwoOptSwap (i, k, path_intersections);
+                    
+                    std::cout<< "the new path is" << std::endl;
+                    for(int i = 0; i < 6; i++){
+                        std::cout<< new_path.path[i].intersectionID << " -> ";
+                    }
+                    std::cout<< std::endl;
+                    
+                    if (isLegal(new_path)) {
+                        
+                        std::cout<< "The path is legal! Updating path" << std::endl;
+                        
+                        // Improvement found so reset
+                        improve = 0;
+                        best_difference = difference;
+                        path_intersections = new_path;
+                    }
+                }
+            }
+        }
+        std::cout<< "incrementing improve " << improve << std::endl;
+        improve ++;
+    }
+    
+    return path_intersections;
+}
+
+
+
+Path TwoOptSwap( const int& i, const int& k, Path& path) 
+{
+    int size = path.pathSize();
+    Path new_path;
+    new_path.setPathSize(size);
+ 
+    std::cout << "Keeping these the same:";
+    
+    // 1. take route[0] to route[i-1] and add them in order to new_route
+    for ( int c = 0; c <= i - 1; ++c )
+    {
+        new_path.insertNode( c, path.getNode( c ) );
+        std::cout << c;
+    }
+     
+    std::cout << "Reverse:";
+    
+    // 2. take route[i] to route[k] and add them in reverse order to new_route
+    int dec = 0;
+    for ( int c = i; c <= k; ++c )
+    {
+        new_path.insertNode( c, path.getNode( k - dec ) );
+        dec++;
+        
+        std::cout << c;
+    }
+ 
+    std::cout << "Keeping these the same:";
+    
+    // 3. take route[k+1] to end and add them in order to new_route
+    for ( int c = k + 1; c < size; ++c )
+    {
+        new_path.insertNode( c, path.getNode( c ) );
+        std::cout << c;
+    }
+    
+    return new_path;
+}
+
+
+
+
+double find_distance_btw_intersections(unsigned inter1, unsigned inter2){
+    LatLon pt1 = getIntersectionPosition(inter1);
+    LatLon pt2 = getIntersectionPosition(inter2);
+    return find_distance_between_two_points(pt1,pt2);
+            
+}
+
+double find_distance_btw_delivery_points(DeliveryPoint& dp1, DeliveryPoint& dp2){
+    LatLon pt1 = getIntersectionPosition(dp1.intersectionID);
+    LatLon pt2 = getIntersectionPosition(dp2.intersectionID);
+    return find_distance_between_two_points(pt1,pt2);
+            
+}
+  
+    
+//test cases for legal checking
+std::vector<DeliveryPoint> deliveries_legal;
+std::vector<DeliveryPoint> deliveries_illegal;
+
+void test_legality_checking(){
+    deliveries_legal.resize(4);
+    deliveries_illegal.resize(4);
+    
+    DeliveryPoint p1(1,true,1);
+    DeliveryPoint d1(1,false,1); 
+    DeliveryPoint p2(2,true,1); 
+    DeliveryPoint d2(2,false,1); 
+    DeliveryPoint p3(3,true,1); 
+    DeliveryPoint d3(3,false,1); 
+    DeliveryPoint p4(4,true,1); 
+    DeliveryPoint d4(4,false,1); 
+    DeliveryPoint p5(5,true,1); 
+    DeliveryPoint d5(5,false,1); 
+    DeliveryPoint p6(5,true,1); 
+    DeliveryPoint d6(5,false,1); 
+    
+    deliveries_legal= {p1,p2,d2,p3,d1,p4,p5,d5,d3,d4,p6,p6};
+    deliveries_illegal= {p1,p3,d1,d3,d4,d5,p4,p5};
+        //1. dropoff before pickup {p1,p2,d3,p3,p4,p5,d1,d2,d4,d5}
+        //2. same drop off twice {p1,p2,p3,d1,d2,d3,d3,d4,d5,p4,p5};
+        //3. same pickup twice --------------->not covered, maybe implement?
+        //4. a package wasn't dropped off------> not covered, maybe inplement?
+        //5. a package wasn't picked up p1,p3,d1,d3,d4,d5,p4,p5};
+    
+    
+    Path path_legal(deliveries_legal);
+    Path path_illegal(deliveries_illegal);
+    
+    bool result1 = isLegal(path_legal);
+    bool result2 = isLegal(path_illegal);
+    
+    std::cout << "path 1 is legal, checking function says it is ";
+    if (result1)
+        std::cout << "legal.";
+    else
+        std::cout << "illegal.";
+    std::cout << std::endl;
+    
+    std::cout << "path 2 is illegal, checking function says it is ";
+    if (result2)
+        std::cout << "legal.";
+    else
+        std::cout << "illegal.";
+    std::cout << std::endl;
+}
+
+bool isLegal(Path& path_inter){
+    
+    //hash table that hashes delivery IDs into current status(if it has been picked up and dropped off)
+    std::unordered_map<unsigned,bool> pickUps;
+    
+    int size = path_inter.pathSize();
+  
+    for(int i = 0; i < size; i++){
+        DeliveryPoint current_point = path_inter.path[i];
+        
+        //if pickup, insert into hash table
+        if (current_point.pickUp == true)
+            pickUps.insert(std::make_pair<unsigned,bool>(unsigned(current_point.deliveryID),false));
+        
+        //if drop off, check hash table
+        else{
+            auto it = pickUps.find(current_point.deliveryID);
+            if(it == pickUps.end()) return false;   //if pickUp not found, path is illegal 
+            if(it->second == true) return false;           //if package already dropped off, path is illegal
+            it->second = true;                             //if pick up found, mark it as dropped off
+        }
+            
+    }
+  
+    if (pickUps.size() != path_inter.pathSize()/2) return false; //not all packages were picked up
+    
+    //maybe check if all pickus have been dropped off by looping thru hash table and making sure everything is TRUE
+    
+    return true;
+}
+
+
+
+//Path & local_perturbation(Path path_inter){
+//    //
+//}

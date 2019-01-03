@@ -1,0 +1,396 @@
+#include <vector>
+#include <iostream>
+#include <list>
+
+#include "graphics.h"
+#include "m1.h"
+#include "m2.h"
+#include "m3.h"
+#include "pathFinding.h"
+#include "Map_Data.h"
+#include "utilities.h"
+
+#define NO_EDGE -1  // Illegal edge ID  no edge 
+
+
+
+
+
+
+//first, set up the graph
+
+std::vector<Node*> node_list;
+std::vector<Edge*> edge_list;
+std::set<unsigned> visited_nodes;
+
+void set_up_graph(){
+    //intersection_graph
+    unsigned numNodes = getNumberOfIntersections();
+    node_list.resize(numNodes);
+    
+    for (unsigned id = 0; id < numNodes; id++){
+        Node* nodePtr = new Node(id);
+        node_list[id] = nodePtr;
+    }
+    
+    //street_segment_graph
+    unsigned numEdges = getNumberOfStreetSegments();
+    edge_list.resize(numEdges);
+    
+    for (unsigned id = 0; id < numEdges; id++){
+        Edge* edgePtr = new Edge(id);
+        edge_list[id] = edgePtr;
+    }
+}
+
+std::unordered_map<std::string, std::vector<POIIndex>> poi_string_to_ids;
+
+void set_up_poi_string_to_ids() {
+    poi_string_to_ids.clear();
+    for (POIIndex i = 0; i < getNumberOfPointsOfInterest(); ++i) {
+        poi_string_to_ids[getPointOfInterestName(i)].push_back(i);
+    }
+}
+
+std::vector<POIIndex> find_POIs_by_name(std::string name) {
+    return poi_string_to_ids[name];
+}
+
+void check_graph_setup(){
+    
+//    for (int edge = 0; edge < 10; edge ++){
+//        std::cout << "edge " << edge_list[edge]->edge_id << " to: " << edge_list[edge]->to << " from: " << edge_list[edge]-> from << " travel time: " << edge_list[edge]-> travel_time << std::endl;
+//    }
+    //check Yonge& College nodeID = 2290
+    unsigned nodeID = 1048;
+    Node* nodePtr = node_list[nodeID];
+    for (int i = 0; i < nodePtr->outgoing_edges.size(); i++){
+        unsigned edge_id = nodePtr->outgoing_edges[i];
+        Edge* edge = edge_list[edge_id];
+        unsigned toNodeID = edge->getToNode(nodeID);
+        std::cout<< getIntersectionName(toNodeID) <<std::endl;
+    }
+    
+    
+}
+
+
+
+//Breadth first search
+//node: intersection
+//edge: outgoing edge from a node, belongs to the node
+//wavefront: all the nodes left to be examined
+//current waveElem: the node currently being examined for the next potential path
+//
+bool bfsPath (Node* starting_node, unsigned destID) {
+   std::list<Node*> wavefront;  // Nodes to explore next
+   starting_node->travel_time = 0; //initialize travel_time to 0
+   wavefront.push_back(starting_node);
+
+   while (!wavefront.empty()) {
+
+        Node* curr = wavefront.front();
+        wavefront.pop_front(); // Remove from wavefront
+        
+        unsigned curr_node_id = curr->node_id;
+        visited_nodes.insert(curr_node_id);
+        
+        //DEBUG
+//        std::cout << std::endl;   
+//        std::cout<< "Currently at " << getIntersectionName(curr_node_id) << std::endl;
+        
+        //check if we are at the destination
+        if (curr_node_id == destID)
+            return (true);
+
+        //if not, check all adjacent intersections (except the one i just came from)
+        else {
+            //for each outgoing edge
+            unsigned num_edges = curr->outgoing_edges.size();
+            
+            for (int i = 0; i < num_edges; i++) {
+                unsigned edge_id = curr->outgoing_edges[i];
+                
+                if(edge_id == curr->reachingEdge){
+                    continue;
+                }
+                
+                Edge* edge = edge_list[edge_id];
+                unsigned toNodeID = edge -> getToNode(curr_node_id);
+                Node* toNode = node_list[toNodeID];
+                
+                //update info for to nodes, only if its a faster path
+                double new_travel_time = curr-> travel_time + edge-> travel_time;
+                
+                if (new_travel_time < toNode-> travel_time) {
+                    toNode -> reachingEdge = edge_id;
+                    toNode-> travel_time = new_travel_time;
+                    
+                    //DEBUG
+//                    std::cout<< "Adding " << getIntersectionName(toNodeID) << " to the wavefront" << std::endl;
+                    
+                    //add them to the wavefront (list of nodes yet to be explored))
+                    wavefront.push_back(toNode);
+                }
+                //DEBUG
+                             
+                
+            }
+        }
+    }
+    return (false); 
+}
+
+std::vector<unsigned> find_path_between_intersections(const unsigned intersect_id_start, const unsigned intersect_id_end, const double turn_penalty) {
+    set_up_graph();
+    Node* start_node = node_list[intersect_id_start];
+    bool found = bfsPath(start_node, intersect_id_end);
+    
+    std::vector<unsigned> path;
+    if (found)
+        path = bfsTraceBack(intersect_id_end);
+    
+//    std::cout << "the reverse path is ";
+//    
+//    for (int i = 0; i < path.size(); i++){
+//        std::cout<< path[i] << std::endl;
+//    }
+//    
+//    if(path.empty()){
+//        std::cout<< "Path vector is empty." << std::endl;
+//    }
+//    draw_test_path(path);
+    
+    restore_node_info();
+    free_node_list();
+    free_edge_list();
+    return path;
+}
+
+void free_node_list(){
+    for(auto it = node_list.begin(); it != node_list.end(); it ++)
+        delete(*it);
+}
+
+void free_edge_list(){
+    for(auto it = edge_list.begin(); it != edge_list.end(); it ++)
+        delete(*it);
+}
+
+void restore_node_info(){
+    for(auto it = visited_nodes.begin(); it != visited_nodes.end(); it ++)
+        node_list[*it]->restore();
+}
+
+std::vector<unsigned> bfsTraceBack(int destID) {
+    std::vector<unsigned> path;
+    Node* currNode = node_list[destID];
+    unsigned prevEdgeID = currNode->reachingEdge;
+
+    while (prevEdgeID != NO_EDGE) {
+        path.push_back(prevEdgeID);
+        unsigned currNodeID = edge_list[prevEdgeID]->getToNode(currNode->node_id);
+        currNode = node_list[currNodeID];
+        prevEdgeID = currNode->reachingEdge;
+    }
+    //TRY USING ANOTHER DATA STRUCTURE TO AVOID REVERSING THE VECTOR
+    std::reverse(path.begin(),path.end());
+    return path;
+}
+
+std::vector<std::vector < LatLon >> test_street_segments;
+
+void collect_street_segments2(std::vector<unsigned> path) {
+    
+    for (unsigned i = 0; i < path.size(); i++) {
+        collect_curve_points_for_street_segment2(path[i]);
+    }
+}
+
+void collect_curve_points_for_street_segment2(unsigned ss_id) {
+    auto info = getStreetSegmentInfo(ss_id);
+
+    //create a new vector to hold curve points
+    std::vector<LatLon>* street_segment = new std::vector<LatLon>;
+    unsigned numCurvePoints = info.curvePointCount;
+    street_segment->resize(numCurvePoints + 2); //to hold curve points and 2 end points
+
+    (*street_segment)[0] = getIntersectionPosition(info.from);
+    unsigned cp_id;
+    for (cp_id = 1; cp_id <= numCurvePoints; cp_id++) {
+        (*street_segment)[cp_id] = getStreetSegmentCurvePoint(ss_id, cp_id - 1);
+    }
+    (*street_segment)[cp_id] = getIntersectionPosition(info.to);
+    
+    test_street_segments.push_back(*street_segment);
+    
+    delete street_segment;
+}
+
+
+void draw_test_path(std::vector<unsigned> path) {
+    collect_street_segments2(path);
+    
+    for (auto it = test_street_segments.begin(); it != test_street_segments.end(); it++) {
+
+        for (auto curve_pt = (*it).begin(); curve_pt != (*it).end() - 1; curve_pt++) {
+
+            double x1, y1, x2, y2;
+            x1 = convert_latlon_to_x(*curve_pt);
+            y1 = convert_latlon_to_y(*curve_pt);
+            x2 = convert_latlon_to_x(*(curve_pt + 1));
+            y2 = convert_latlon_to_y(*(curve_pt + 1));
+            setcolor(RED);
+            setlinewidth(3);
+            drawline(x1, y1, x2, y2);
+
+        }
+    }
+}
+
+double compute_path_travel_time(const std::vector<unsigned>& path, 
+                                const double turn_penalty){
+    
+}
+
+std::vector<unsigned> find_path_to_point_of_interest(const unsigned intersect_id_start, 
+                                               const std::string point_of_interest_name,
+                                               const double turn_penalty){
+    
+}
+////Dijkstra (Path Legality)
+//
+//bool bfsPath(Node* sourceNode, int destID) {
+//
+//    list<WaveElem> wavefront;
+//
+//    while (wavefront not empty && has entry < bestPathLen) {
+//        WaveElem wave = wavefront.front();
+//        wavefront.pop_front(); // Remove from wavefront
+//        Node *node = wave.node;
+//
+//        if (wave.pathLen < node->pathLen) {
+//            ...
+//            wavefront.push_back(
+//                    WaveElem(toNode, outEdge.id,
+//                    node.pathLen + travelTime(outEdge));
+//                    ...for (auto elem : col)
+//
+//            }
+//    }
+//}
+
+
+
+
+
+
+
+/**********************************************************************************/
+
+//extern Map_Data* map_data;
+//
+//typedef std::pair <double, IntersectionIndex> AdjacentPair;
+//
+//std::vector<StreetSegmentIndex> dijkstra(IntersectionIndex start_intersection, IntersectionIndex destination) {
+//
+//    /* NOTES: 
+//     *If a node visited has a new lower total_timeance value, update it but don't add it to the wavefront
+//     * Must check EVERY node and not just stop at the first path found at the destination 
+//     * 
+//     */
+//    unsigned numberOfIntersections = getNumberOfIntersections();
+//    bool destination_found = false;
+//
+//    struct adjacent_info {
+//        IntersectionIndex id = -1;
+//        IntersectionIndex prev_id = -1;
+//        StreetSegmentIndex prev_street = -1;
+//    } adjacent;
+//
+//
+//    std::priority_queue <AdjacentPair, std::vector<AdjacentPair>, std::greater<AdjacentPair> > wavefront;
+//    std::vector <adjacent_info> explored_nodes;
+//    std::vector <StreetSegmentIndex> path;
+//    //    std::vector<bool> explored_set(numberOfIntersections, false);
+//    std::vector<double> total_time(numberOfIntersections, DOUBLE_MAX);
+//
+//
+//    //begin with start_intersection, set current_nodeId total_time to 0
+//    total_time[start_intersection] = 0;
+//    wavefront.push(std::make_pair(total_time[start_intersection], start_intersection));
+//    IntersectionIndex current_nodeId = wavefront.front().second;
+//
+//
+//    while (!wavefront.empty()) {
+//
+//        //total_time is stored in the first member while the intersection_id is stored in the second order
+//        //must be stored this way to sort total_time in ascending order 
+//        wavefront.pop();
+//
+//        std::vector <StreetSegmentIndex> adjacent_streets = map_data->find_intersection_street_segments(current_nodeId);
+//
+//
+//        for (StreetSegmentIndex segment_id = 0; segment_id < adjacent_streets.size(); segment_id++) {
+//            StreetSegmentInfo street_info = getStreetSegmentInfo(adjacent_streets[segment_id]);
+//
+//            //            unsigned adjacent = street_info.to;
+//            adjacent.id = street_info.to;
+//
+//            if (are_directly_connected(current_nodeId, adjacent.id)
+//                    && current_nodeID != adjacent.id) {
+//
+//                //                explored_set[adjacent.id] = true;
+//
+//                //weights being the travel time between the current_nodeId and adjacent intersection 
+//                double travel_time = find_street_segment_travel_time(segment_id);
+//
+//                //                if (!explored_set[adjacent.id]
+//                //                        && total_time[current_nodeId] != INT_MAX
+//                //                        && total_time[adjacent.id] > total_time[current_nodeId] + travel_time) {
+//
+//                if (total_time[adjacent.id] > total_time[current_nodeId] + travel_time) {
+//
+//                    total_time[adjacent.id] = total_time[current_nodeId] + travel_time;
+//
+//
+//
+//                    //Adding checked intersection to the wavefront 
+//                    wavefront.push(std::make_pair(total_time[adjacent.id], adjacent.id));
+//
+//                    adjacent.prev_id = current_nodeId;
+//                    adjacent.prev_street = segment_id;
+//
+//                    explored_nodes.push_back(adjacent);
+//
+//                    //                    if (adjacent.id == destination) {
+//                    //                        destination_found = true;
+//                    //                        break;
+//                    //                    }
+//                }
+//            }
+//        }
+//    }
+//
+//    if (destination_found) {
+//        //Last adjacent segment to be added at the destination
+//        IntersectionIndex prev_intersection = explored_nodes[explored_nodes.size() - 1].prev_id;
+//        path.push_back(explored_nodes[explored_nodes.size() - 1].prev_street);
+//
+//        for (unsigned num_segments = 0; num_segments < explored_nodes.size(); num_segments++) {
+//            if (explored_nodes[num_segments].id = prev_intersection) {
+//                prev_intersection = explored_nodes[num_segments].prev_id;
+//                path.push_back(explored_nodes[num_segments].prev_street);
+//            }
+//        }
+//        std::reverse(path.begin(), path.end());
+//    }
+//    else {
+//        //Return an empty vector
+//        std::cout << "No path to destination" << std::endl;
+//        path.clear();
+//    }
+//
+//    return path;
+//
+//}

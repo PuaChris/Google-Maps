@@ -1,0 +1,132 @@
+/* 
+ * Copyright 2018 University of Toronto
+ *
+ * Permission is hereby granted, to use this software and associated 
+ * documentation files (the "Software") in course work at the University 
+ * of Toronto, or for personal use. Other uses are prohibited, in 
+ * particular the distribution of the Software either publicly or to third 
+ * parties.
+ *
+ * The above copyright notice and this permission notice shall be included in 
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+#include <iostream>
+#include <string>
+#include <vector>
+#include "graphics.h"
+#include "m1.h"
+#include "m2.h"
+#include "m3.h"
+#include "pathFinding.h"
+#include "Map_Data.h"
+#include "utilities.h"
+
+//Program exit codes
+constexpr int SUCCESS_EXIT_CODE = 0; //Everything went OK
+constexpr int ERROR_EXIT_CODE = 1; //An error occurred
+constexpr int BAD_ARGUMENTS_EXIT_CODE = 2; //Invalid command-line usage
+
+
+//The default map to load if none is specified
+std::string default_map_path = "/cad2/ece297s/public/maps/toronto_canada.streets.bin";
+const std::string map_path_base = "/cad2/ece297s/public/maps/";
+const std::string map_path_extension = ".streets.bin";
+
+// For debugging, set to false (just use Toronto)
+// TODO - set to true when submitting
+constexpr bool PROMPT_FOR_MAP = true;
+
+struct Map {
+    std::string name;
+    std::string file_name;
+};
+
+Map maps[] = {
+    Map
+    { "Toronto, Canada", "toronto_canada"},
+    Map
+    { "Saint Helena", "saint-helena"},
+    Map
+    { "Beijing, China", "beijing_china"},
+    Map
+    { "New York, USA", "new-york_usa"},
+    Map
+    { "Tokyo, Japan", "tokyo_japan"}
+};
+
+int main(int argc, char** argv) {
+    std::string map_path;
+
+
+    if (argc == 1) {
+        if (PROMPT_FOR_MAP) {
+            std::cout << "Available Maps:" << std::endl;
+            int num_maps = sizeof (maps) / sizeof (maps[0]);
+            for (int i = 0; i < num_maps; ++i) {
+                std::cout << i + 1 << ". " << maps[i].name << std::endl;
+            }
+            std::cout << num_maps + 1 << ". Enter map file name" << std::endl;
+            std::cout << num_maps + 2 << ". Enter full map file path" << std::endl;
+
+            std::cout << "Enter map number: ";
+            int map_number;
+            std::cin >> map_number;
+
+            if (1 <= map_number && map_number <= num_maps) {
+                map_path = map_path_base + maps[map_number - 1].file_name + map_path_extension;
+                name_of_map = maps[map_number - 1].name;
+            }
+            else if (map_number == num_maps + 1) {
+                std::cout << "Enter map file name: ";
+                std::cin >> name_of_map;
+                map_path = map_path_base + name_of_map + map_path_extension;
+            }
+            else if (map_number == num_maps + 2) {
+                std::cout << "Enter full map file path: ";
+                std::cin >> name_of_map;
+                map_path = name_of_map;
+            }
+            else {
+                std::cout << "Invalid map number" << std::endl;
+                return 0;
+            }
+        } else {
+            map_path = map_path_base + maps[0].file_name + map_path_extension;
+            name_of_map = maps[0].name;
+        }
+
+    } else if (argc == 2) {
+        //Get the map from the command line
+        map_path = argv[1];
+    } else {
+        //Invalid arguments
+        std::cerr << "Usage: " << argv[0] << " [map_file_path]\n";
+        std::cerr << "  If no map_file_path is provided a default map is loaded.\n";
+        return BAD_ARGUMENTS_EXIT_CODE;
+    }
+
+    //Load the map and related data structures
+    bool load_success = load_map(map_path);
+    if (!load_success) {
+        std::cerr << "Failed to load map '" << map_path << "'\n";
+        return ERROR_EXIT_CODE;
+    }
+    std::cout << "Successfully loaded map '" << map_path << "'\n";
+    
+    draw_map();
+
+    //Clean-up the map data and related data structures
+    std::cout << "Closing map\n";
+    close_map();
+
+    return SUCCESS_EXIT_CODE;
+}
+

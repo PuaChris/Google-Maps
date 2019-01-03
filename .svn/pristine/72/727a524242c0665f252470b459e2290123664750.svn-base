@@ -1,0 +1,255 @@
+#include <vector>
+#include <iostream>
+#include <list>
+
+#include "graphics.h"
+#include "m1.h"
+#include "m2.h"
+#include "m3.h"
+#include "pathFinding.h"
+#include "Map_Data.h"
+#include "utilities.h"
+
+#define NO_EDGE -1  // Illegal edge ID representing no edge 
+
+constexpr double heuristic_speed = 120 / 3.6;
+
+//adjacency lists for path finding
+std::vector<Node*> node_list;
+std::vector<Edge*> edge_list;
+
+std::set<unsigned> visited_nodes;
+std::unordered_map<std::string, std::vector<POIIndex>> poi_string_to_ids;
+
+//************************************  SET UP FUNCTIONS  *******************************************************
+
+// Sets up the node and edge graphs to lookups during path finding
+void set_up_graph() {
+    //set up intersection_graph
+    unsigned num_nodes = getNumberOfIntersections();
+    node_list.resize(num_nodes);
+
+    for (unsigned id = 0; id < num_nodes; id++) {
+        Node* nodePtr = new Node(id);
+        node_list[id] = nodePtr;
+    }
+
+    //set up street_segment_graph
+    unsigned num_edges = getNumberOfStreetSegments();
+    edge_list.resize(num_edges);
+
+    for (unsigned id = 0; id < num_edges; id++) {
+        Edge* edgePtr = new Edge(id);
+        edge_list[id] = edgePtr;
+    }
+}
+
+
+void set_up_poi_string_to_ids() {
+    poi_string_to_ids.clear();
+    for (POIIndex i = 0; i < getNumberOfPointsOfInterest(); ++i) {
+        poi_string_to_ids[getPointOfInterestName(i)].push_back(i);
+    }
+}
+
+//************************************  HELPER FUNCTIONS  *******************************************************
+
+// Returns POI index given its name
+std::vector<POIIndex> find_POIs_by_name(std::string name) {
+    return poi_string_to_ids[name];
+}
+
+// Comparison function to sort node travel time by ascending order in the priority list
+bool compare_nodes(Node* node1, Node* node2) {
+    return node1->total_time > node2->total_time;
+}
+
+// Frees dynamically allocated memory for graphs
+void free_graph() {
+    for (auto it = node_list.begin(); it != node_list.end(); it++)
+        delete(*it);
+    
+    for (auto it = edge_list.begin(); it != edge_list.end(); it++)
+        delete(*it);
+}
+
+// Restores modified nodes to its original condition to be ready for the next search
+void restore_node_info() {
+    for (auto it = visited_nodes.begin(); it != visited_nodes.end(); it++)
+        node_list[*it]->restore();
+
+    visited_nodes.clear();
+}
+
+//Given 2 street segment ids, returns true if the 2 segments are not on the same street
+bool is_turning(int edge1, int edge2) {
+
+    if (edge1 == NO_EDGE || edge2 == NO_EDGE)
+        return false;
+
+    auto info1 = getStreetSegmentInfo(edge1);
+    auto info2 = getStreetSegmentInfo(edge2);
+
+    return info1.streetID != info2.streetID;
+}
+
+//************************************  PATH FINDING FUNCTIONS  *******************************************************
+
+
+/// Returns the fastest path between the start intersection and the end intersection, if one exists. 
+std::vector<unsigned> find_path_between_intersections(const unsigned intersect_id_start, const unsigned intersect_id_end, const double turn_penalty) {
+
+    Node* start_node = node_list[intersect_id_start];
+    bool found = A_star_find_path(start_node, intersect_id_end, turn_penalty);
+
+    std::vector<unsigned> path;
+    if (found)
+        path = bfsTraceBack(intersect_id_end);
+
+    restore_node_info();
+
+    return path;
+}
+
+
+// Finds the fastest path between 2 nodes using the A* algorithm. Stores path info in respective nodes in node_list. Returns true if legal path is found.
+bool A_star_find_path(Node* starting_node, unsigned destID, double turning_penalty) {
+    
+    std::priority_queue < Node*, std::vector<Node*>, std::function<bool(Node*, Node*) >> wavefront(compare_nodes); // Nodes to explore next
+    
+    starting_node->travel_time = 0; 
+    wavefront.push(starting_node);
+    visited_nodes.insert(starting_node->node_id);
+
+
+    while (!wavefront.empty()) {
+
+        Node* curr = wavefront.top();
+        wavefront.pop(); 
+
+        unsigned curr_node_id = curr->node_id;
+
+        //check if we are at the destination
+        if (curr_node_id == destID)
+            return true;
+
+        //if not, check all adjacent intersections
+        else {
+            //for each outgoing edge
+            unsigned num_edges = curr->outgoing_edges.size();
+
+            for (size_t i = 0; i < num_edges; i++) {
+                unsigned edge_id = curr->outgoing_edges[i];
+
+                //Skip the edge if this is exactly where we came from
+                if (static_cast<int>(edge_id) == curr->reachingEdge) {
+                    continue;
+                }
+
+                Edge* edge = edge_list[edge_id];
+                unsigned toNodeID = edge -> getToNode(curr_node_id);
+                Node* toNode = node_list[toNodeID];
+
+                //update info for to nodes only if its a faster path
+                double new_travel_time = curr-> travel_time + edge-> travel_time + (is_turning(curr->reachingEdge, edge_id) ? turning_penalty : 0);
+                
+                if (new_travel_time < toNode-> travel_time) {
+                    toNode -> reachingEdge = edge_id;
+                    toNode-> travel_time = new_travel_time;
+
+                    //estimate total travel time
+                    LatLon pos1 = getIntersectionPosition(toNodeID);
+                    LatLon pos2 = getIntersectionPosition(destID);
+                    double heuristic_time = find_distance_between_two_points(pos1, pos2) / heuristic_speed;
+                    toNode-> total_time = new_travel_time + heuristic_time;
+
+                    wavefront.push(toNode);
+                    visited_nodes.insert(toNodeID);
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+
+// Returns a vector of street segment ids traversed in the path by tracing back from the destination to the starting node, 
+std::vector<unsigned> bfsTraceBack(int destID) {
+    std::vector<unsigned> path;
+    
+    //start from destination
+    Node* currNode = node_list[destID];
+    int prevEdgeID = currNode->reachingEdge;
+
+    //while not at the starting node yet
+    while (prevEdgeID != NO_EDGE) {
+        path.push_back(prevEdgeID);
+        unsigned currNodeID = edge_list[prevEdgeID]->getToNode(currNode->node_id);
+        currNode = node_list[currNodeID];
+        prevEdgeID = currNode->reachingEdge;
+    }
+    
+    //reverse path so that it is in the correct order
+    std::reverse(path.begin(), path.end());
+    
+    return path;
+}
+
+
+// Computes the travel time in seconds needed to traverse a given path and given turn penalty
+double compute_path_travel_time(const std::vector<unsigned>& path, const double turn_penalty) {
+
+    double travel_time = 0;
+
+    for (auto it = path.begin(); it != path.end(); it++) {
+        travel_time += edge_list[*it]->travel_time;
+
+        //no turning for the the first street segment
+        if (it == path.begin())
+            continue;
+
+        if (is_turning(*it, *(it - 1)))
+            travel_time += turn_penalty;
+    }
+
+    return travel_time;
+}
+
+
+// Returns the fastest path from the start intersection to a point of interest with the specified name
+std::vector<unsigned> find_path_to_point_of_interest(const unsigned intersect_id_start,const std::string point_of_interest_name, const double turn_penalty) {
+    
+    set_up_poi_string_to_ids();
+
+    double best_time = FLT_MAX;
+    std::vector<unsigned> best_path;
+
+    std::vector<POIIndex> pois = find_POIs_by_name(point_of_interest_name);
+
+    std::priority_queue<std::pair<double, POIIndex>, std::vector <std::pair<double, POIIndex>>, std::greater<std::pair<double, POIIndex>>> POIfront;
+
+    for (POIIndex poi : pois) {
+        double distance = find_distance_between_two_points(getIntersectionPosition(intersect_id_start), getPointOfInterestPosition(poi));
+        POIfront.push(std::make_pair(distance, poi));
+    }
+
+    for (int i = 0; i < 9 && POIfront.size() > 0; i++) {
+        POIIndex poi = POIfront.top().second;
+        POIfront.pop();
+
+        unsigned intersect_id_end = find_closest_intersection(getPointOfInterestPosition(poi));
+
+        std::vector<unsigned> path = find_path_between_intersections(intersect_id_start, intersect_id_end, turn_penalty);
+        double time = compute_path_travel_time(path, turn_penalty);
+
+        if (time != 0 && time < best_time) {
+            best_time = time;
+            best_path = path;
+        }
+    }
+    
+    return best_path;
+}
+
+

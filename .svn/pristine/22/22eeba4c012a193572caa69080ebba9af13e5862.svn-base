@@ -1,0 +1,190 @@
+#include "utilities.h"
+#include "graphics.h"
+#include <math.h>
+#include "m2.h"
+
+double world_width = 1.0;
+double avg_latitude = 0;
+
+//convert a LatLon to a cartesian point for r-tree searches
+
+Cartesian_point convert_to_cartesian_point(LatLon position) {
+    double x, y, z;
+
+    x = EARTH_RADIUS_IN_METERS * cos(position.lat() * DEG_TO_RAD) * cos(position.lon() * DEG_TO_RAD);
+    y = EARTH_RADIUS_IN_METERS * cos(position.lat() * DEG_TO_RAD) * sin(position.lon() * DEG_TO_RAD);
+    z = EARTH_RADIUS_IN_METERS * sin(position.lat() * DEG_TO_RAD);
+    
+    Cartesian_point point(x, y, z);
+    return point;
+}
+
+double convert_latlon_to_x(double avg_lat, double lon) {
+    return EARTH_RADIUS_IN_METERS * cos(avg_latitude * DEG_TO_RAD) * lon * DEG_TO_RAD;
+}
+
+double convert_latlon_to_y(double lat, double lon) {
+    return EARTH_RADIUS_IN_METERS * lat * DEG_TO_RAD;
+}
+
+double convert_latlon_to_x(LatLon position) {
+    double lon = position.lon();
+    return EARTH_RADIUS_IN_METERS * cos(avg_latitude * DEG_TO_RAD) * lon * DEG_TO_RAD;
+}
+
+double convert_latlon_to_y(LatLon position) {
+    double lat = position.lat();
+    return EARTH_RADIUS_IN_METERS * lat * DEG_TO_RAD;
+}
+
+t_point convert_latlon_to_t_point(LatLon position) {
+    double x = EARTH_RADIUS_IN_METERS * cos(avg_latitude * DEG_TO_RAD) * position.lon() * DEG_TO_RAD;
+    double y = EARTH_RADIUS_IN_METERS * position.lat() * DEG_TO_RAD;
+
+    t_point point(x, y);
+
+    return point;
+}
+
+LatLon convert_cartesian_to_latlon(double x, double y) {
+
+    double lat = y / (EARTH_RADIUS_IN_METERS * DEG_TO_RAD);
+    double lon = x / (EARTH_RADIUS_IN_METERS * DEG_TO_RAD * cos(avg_latitude * DEG_TO_RAD));
+
+    LatLon position(lat, lon);
+    return position;
+}
+
+void select_feature_color(FeatureType type) {
+    switch (type) {
+        case Unknown:
+            setcolor(217, 217, 217, 255); //light grey
+            break;
+        case Park:
+            setcolor(179, 255, 179, 255); //light green
+            break;
+        case Beach:
+            setcolor(255, 255, 204, 255); //light yellow
+            break;
+        case Lake:
+            setcolor(153, 204, 255, 255); //light blue
+            break;
+        case River:
+            setcolor(153, 204, 255, 255); //light blue
+            break;
+        case Island:
+            setcolor(217, 217, 217, 255); // light grey
+            break;
+        case Building:
+            setcolor(255, 255, 204, 255); //light yellow
+            break;
+        case Greenspace:
+            setcolor(179, 255, 179, 255); //light green
+            break;
+        case Golfcourse:
+            setcolor(179, 255, 179, 255); //light green
+            break;
+        case Stream:
+            setcolor(153, 204, 255, 255); //light blue
+            break;
+        default:
+            setcolor(217, 217, 217, 255); //light grey
+    }
+}
+
+void select_POI_text_color(POI_type type) {
+    switch (type) {
+        case fuel:
+            setcolor(255, 0, 0, 255); //red
+            break;
+        case fast_food:
+            setcolor(255, 117, 26, 255); //orange
+            break;
+        case bank:
+            setcolor(0, 102, 255, 255); //blue
+            break;
+        case cafe:
+            setcolor(255, 117, 26, 255); //orange
+            break;
+        case school:
+            setcolor(0, 0, 0, 255); // black
+            break;
+        case hospital: 
+            setcolor(255, 0, 0, 255); //red
+            break;
+        case library:
+            setcolor(0, 102, 255, 255); //blue
+            break;
+        default:
+            setcolor(255, 153, 0, 255); //yellow
+    }
+}
+
+bool same_point(t_point p1, t_point p2) {
+    return p1.x == p2.x && p1.y == p2.y;
+}
+
+bool same_point(LatLon p1, LatLon p2) {
+    return p1.lat() == p2.lat() && p1.lon() == p2.lon();
+}
+
+
+//given a street segment ID, returns a enum that identifies if its a major/medium/minor street
+
+StreetWidth getStreetWidth(StreetSegmentInfo info) {
+    float speedLimit = info.speedLimit;
+
+    if (speedLimit >= HIGHWAY_SPEED_LIMIT)
+        return Major;
+    else if (speedLimit >= MAJOR_STREET_SPEED_LIMIT)
+        return Medium;
+    else
+        return Minor;
+}
+
+double getZoomLevel() {
+    t_bound_box currentScreen = get_visible_world();
+    return currentScreen.get_width() / world_width;
+}
+
+double get_screen_area() {
+    return get_visible_world().area();
+}
+
+unsigned get_map_layer(FeatureType type) {
+    switch (type) {
+        case Park:
+            return 1;
+        case Greenspace:
+            return 1;
+        case Golfcourse:
+            return 1;
+        case Lake:
+            return 1;
+        case Island:
+            return 1;
+        case Stream:
+            return 1;
+        case River:
+            return 1;
+        case Beach:
+            return 2;
+        case Building:
+            return 3;
+        default:
+            return 1;
+    }
+}
+
+double calculate_polygon_area(t_point* points, int numPoints) {
+
+    double area = 0;
+    int i, j = numPoints - 1;
+
+    for (i = 0; i < numPoints; i++) {
+        area += (points[j].x + points[i].x) * (points[j].y - points[i].y);
+        j = i;
+    }
+
+    return abs(area)*.5;
+}

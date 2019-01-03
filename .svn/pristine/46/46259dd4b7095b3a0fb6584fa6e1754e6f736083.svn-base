@@ -1,0 +1,60 @@
+#include "m3.h"
+#include "m4.h"
+#include "math.h"
+#include <vector>
+#include "utilities.h"
+
+typedef unsigned pickUpID;
+typedef unsigned dropOffID;
+
+
+
+
+std::vector<unsigned> traveling_courier_greedy(const std::vector<DeliveryInfo>& deliveries,
+        const std::vector<unsigned>& depots,
+        const float turn_penalty) {
+
+    
+    //Plan right now is to go through all of the pick ups and then go through all the drop offs
+    
+    //We choose what depot we want for testing purposes
+    //SET depot_start TO SOME INTERSECTION 
+    IntersectionIndex depot_start;
+    double best_distance = FLT_MAX;
+    std::vector<unsigned> best_path;
+
+    //    Choosing a random depot at start 
+    std::priority_queue<std::pair<double, pickUpID>, std::vector <std::pair<double, pickUpID>>, std::greater<std::pair<double, pickUpID>>> pickUpFront;
+
+    for (DeliveryInfo delivery : deliveries) {
+
+        //Couldn't think of a name
+        pickUpID temp = delivery.pickUp;
+        double distance = find_distance_between_two_points(getIntersectionPosition(depot_start), getPointOfInterestPosition(temp));
+        pickUpFront.push(std::make_pair(distance, temp));
+    }
+
+    for (unsigned i = 0; i < pickUpFront.size(); i++) {
+        pickUpID temp = pickUpFront.top().second;
+        pickUpFront.pop();
+
+        std::vector<unsigned> path = find_path_between_intersections(depot_start, temp, turn_penalty);
+        double distance = distance_between_two_intersections(depot_start, temp);
+
+        if (distance != 0 && distance < best_distance) {
+            best_distance = distance;
+            best_path = path;
+        }
+    }
+
+    return best_path;
+
+}
+
+std::vector<unsigned> traveling_courier(const std::vector<DeliveryInfo>& deliveries,
+        const std::vector<unsigned>& depots,
+        const float turn_penalty) {
+    return traveling_courier_greedy(deliveries, depots, turn_penalty);
+}
+
+

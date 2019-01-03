@@ -1,0 +1,180 @@
+#include "m3.h"
+#include "m4.h"
+#include "math.h"
+#include <vector>
+#include "utilities.h"
+#include "StreetsDatabaseAPI.h"
+
+typedef unsigned pickUpID;
+typedef unsigned dropOffID;
+typedef unsigned depotID;
+
+std::vector<unsigned> traveling_courier_greedy(const std::vector<DeliveryInfo>& deliveries,
+        const std::vector<unsigned>& depots,
+        const float turn_penalty) {
+
+    //Plan right now is to go through all of the pick ups and then go through all the drop offs
+
+    //We choose what depot we want for testing purposes    
+
+    std::vector<IntersectionIndex> path_intersections;
+    std::vector<StreetSegmentIndex> path_street_segments;
+    std::vector<pickUpID> pick_up_remaining;
+    std::vector<dropOffID> drop_off_remaining;
+
+
+    depotID best_depot = INT_MAX;
+    double best_distance = FLT_MAX;
+
+    for (DeliveryInfo delivery_info : deliveries) {
+        pick_up_remaining.push_back(delivery_info.pickUp);
+        drop_off_remaining.push_back(delivery_info.dropOff);
+    }
+
+
+    // 0. Selecting initial depot
+    for (depotID depot_id : depots) {
+
+        std::priority_queue<std::pair<double, pickUpID>, std::vector <std::pair<double, pickUpID>>, std::greater<std::pair<double, pickUpID>>> pick_up_front;
+        
+        
+        for (pickUpID pick_up_id : pick_up_remaining) {
+            double distance = find_distance_between_two_points(getIntersectionPosition(depot_id), getIntersectionPosition(pick_up_id));
+            pick_up_front.push(std::make_pair(distance, pick_up_id));
+        }
+
+        std::vector<StreetSegmentIndex> path;
+        pickUpID next_intersection;
+        double distance;
+
+        while (path.empty() && !pick_up_front.empty()) {
+            distance = pick_up_front.top().first;
+            next_intersection = pick_up_front.top().second;
+            pick_up_front.pop();
+
+            path = find_path_between_intersections(depot_id, next_intersection, turn_penalty);
+        }
+
+        if (!path.empty() && distance < best_distance ) {
+            best_distance = distance; 
+            best_depot = depot_id;
+        }
+    }
+
+    // Start at best depot
+    if (best_depot == INT_MAX) {
+        return std::vector<unsigned>();
+    }
+    
+    IntersectionIndex current_intersection = best_depot;
+    path_intersections.push_back(current_intersection);
+    
+    
+    // 1. Pickups
+    while (!pick_up_remaining.empty()) {
+        //    Choosing a random depot at start 
+        std::priority_queue<std::pair<double, pickUpID>, std::vector <std::pair<double, pickUpID>>, std::greater<std::pair<double, pickUpID>>> pick_up_front;
+
+        for (pickUpID next_intersection : pick_up_remaining) {
+            double distance = find_distance_between_two_points(getIntersectionPosition(current_intersection), getIntersectionPosition(next_intersection));
+            pick_up_front.push(std::make_pair(distance, next_intersection));
+        }
+
+
+        std::vector<StreetSegmentIndex> path;
+        pickUpID next_intersection;
+
+        while (path.empty() && !pick_up_front.empty()) {
+            next_intersection = pick_up_front.top().second;
+            pick_up_front.pop();
+
+            path = find_path_between_intersections(current_intersection, next_intersection, turn_penalty);
+        }
+
+        if (path.empty()) {
+            return path;
+        } else {
+            path_intersections.push_back(next_intersection);
+
+            path_street_segments.insert(path_street_segments.end(), path.begin(), path.end());
+
+            pick_up_remaining.erase(std::remove(pick_up_remaining.begin(), pick_up_remaining.end(), next_intersection), pick_up_remaining.end());
+
+            current_intersection = next_intersection;
+        }
+    }
+
+    // 2. Drop offs
+    while (!drop_off_remaining.empty()) {
+        //    Choosing a random depot at start 
+        std::priority_queue<std::pair<double, dropOffID>, std::vector <std::pair<double, dropOffID>>, std::greater<std::pair<double, dropOffID>>> drop_off_front;
+
+        for (dropOffID next_intersection : drop_off_remaining) {
+            double distance = find_distance_between_two_points(getIntersectionPosition(current_intersection), getIntersectionPosition(next_intersection));
+            drop_off_front.push(std::make_pair(distance, next_intersection));
+        }
+
+
+        std::vector<StreetSegmentIndex> path;
+        dropOffID next_intersection;
+
+        while (path.empty() && !drop_off_front.empty()) {
+            next_intersection = drop_off_front.top().second;
+            drop_off_front.pop();
+
+            path = find_path_between_intersections(current_intersection, next_intersection, turn_penalty);
+        }
+
+        if (path.empty()) {
+            return path;
+        } else {
+            path_intersections.push_back(next_intersection);
+
+            path_street_segments.insert(path_street_segments.end(), path.begin(), path.end());
+
+            drop_off_remaining.erase(std::remove(drop_off_remaining.begin(), drop_off_remaining.end(), next_intersection), drop_off_remaining.end());
+
+            current_intersection = next_intersection;
+        }
+    }
+
+    // 3. Depot
+    std::priority_queue<std::pair<double, depotID>, std::vector <std::pair<double, depotID>>, std::greater<std::pair<double, depotID>>> depot_front;
+
+    for (depotID next_intersection : depots) {
+        double distance = find_distance_between_two_points(getIntersectionPosition(current_intersection), getIntersectionPosition(next_intersection));
+        depot_front.push(std::make_pair(distance, next_intersection));
+    }
+
+
+    std::vector<StreetSegmentIndex> path;
+    depotID next_intersection;
+
+    while (path.empty() && !depot_front.empty()) {
+        next_intersection = depot_front.top().second;
+        depot_front.pop();
+
+        path = find_path_between_intersections(current_intersection, next_intersection, turn_penalty);
+    }
+
+    if (path.empty()) {
+        return path;
+    } else {
+        path_intersections.push_back(next_intersection);
+
+        path_street_segments.insert(path_street_segments.end(), path.begin(), path.end());
+    }
+
+
+
+
+    return path_street_segments;
+}
+
+std::vector<unsigned> traveling_courier(const std::vector<DeliveryInfo>& deliveries,
+        const std::vector<unsigned>& depots,
+        const float turn_penalty) {
+    return traveling_courier_greedy(deliveries, depots, turn_penalty);
+}
+
+

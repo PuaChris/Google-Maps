@@ -1,0 +1,56 @@
+#include "StreetsDatabaseAPI.h"
+
+#ifndef TWO_OPT_H
+#define TWO_OPT_H
+
+
+double find_distance_btw_intersections(unsigned inter1, unsigned inter2);
+
+class Path{
+public:
+    std::vector<IntersectionIndex> path;
+
+public:
+    Path(){
+        
+    }
+    Path(std::vector<IntersectionIndex> p){
+        path = p;
+    }
+    int pathSize(){
+        return path.size();
+    };
+    void setPathSize(unsigned size){
+        path.resize(size);
+    }
+    double pathDistance(){
+        if (path.empty()) return 0;
+
+        double dist = 0;
+        for(auto it = path.begin(); it != (path.end() -1) ; it++){
+            dist += find_distance_btw_intersections(*it,*(it+1));
+        }
+        return dist;
+    };
+
+    void insertNode(unsigned index, IntersectionIndex id){
+        path[index] = id;
+    };
+
+    unsigned getNode(unsigned id){
+        return path[id];
+    };
+
+    Path& operator=(Path& other){
+        path = other.path;
+        return *this;
+    }
+};
+
+Path& TwoOpt(Path& path);
+Path TwoOptSwap( const int& i, const int& k, Path& path);
+
+
+
+#endif /* TWO_OPT_H */
+

@@ -1,0 +1,195 @@
+/* 
+ * Copyright 2018 University of Toronto
+ *
+ * Permission is hereby granted, to use this software and associated 
+ * documentation files (the "Software") in course work at the University 
+ * of Toronto, or for personal use. Other uses are prohibited, in 
+ * particular the distribution of the Software either publicly or to third 
+ * parties.
+ *
+ * The above copyright notice and this permission notice shall be included in 
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+#include <iostream>
+#include <unittest++/UnitTest++.h>
+#include <algorithm>
+#include "m1.h"
+#include "StreetsDatabaseAPI.h"
+
+std::string default_map_path = "/cad2/ece297s/public/maps/toronto_canada.streets.bin";
+
+// Just used to get data for generating test cases
+void get_all_streets();
+void get_intersection_street_segments();
+void get_all_street_segments();
+
+// Convenience function to print all items in a vector, each on its own line
+template<typename Type>
+void print_vector(const std::vector<Type> &vec) {
+    for (Type item : vec) {
+        std::cout << item << std::endl;
+    }
+}
+
+
+/*
+ * This is the main that drives running
+ * unit tests.
+ */
+int main(int /*argc*/, char** /*argv*/) {
+    load_map(default_map_path);
+    int num_failures = UnitTest::RunAllTests();
+    close_map();
+
+    return num_failures;
+}
+
+
+// Functional
+TEST(find_street_ids_from_name_func){
+    // Manual tests
+    
+    std::vector<unsigned> street_ids;
+    
+    street_ids = find_street_ids_from_name("Yonge Street");
+    CHECK_EQUAL(1, street_ids.size());
+    
+    street_ids = find_street_ids_from_name("Nowhere Avenue");
+    CHECK_EQUAL(0, street_ids.size());
+    
+    street_ids = find_street_ids_from_name("Angus Glen Boulevard");
+    CHECK_EQUAL(5, street_ids.size());
+    
+    
+    // Automatically generated tests
+    int NUM_TESTS = 1000;
+    
+    // Seed random generator
+    srand(time(NULL));
+    
+    // Get number of streets
+    int num_streets = getNumberOfStreets();
+//    std::cout << std::endl << "Total streets: " << num_streets << std::endl;
+    
+    // Run specified number of random tests
+    for (int i = 0; i < NUM_TESTS; ++i) {
+        // Get a random street ID
+        int id = rand() % num_streets;
+//        std::cout << "i = " << i << ", id = " << id << std::endl;
+        
+        // Get the street name
+        std::string name = getStreetName(id);
+        
+        // Check that there are some IDs found with the name, including the original ID
+        std::vector<unsigned> ids = find_street_ids_from_name(name);
+        CHECK(ids.size() > 0);
+        CHECK(find(ids.begin(), ids.end(), id) != ids.end());
+    }
+}
+
+
+// Performance
+TEST(find_street_ids_from_name_perf) {
+    // Seed random generator
+    srand(time(NULL));
+    
+    // Get number of streets
+    int num_streets = getNumberOfStreets();
+    
+    // 250ms / 1,000,000 calls = maximum 250ns/call
+    int NUM_TESTS = 1000000;
+    UNITTEST_TIME_CONSTRAINT(250);  // in ms
+
+    // Run specified number of random tests
+    for (int i = 0; i < NUM_TESTS; ++i) {
+        // Get a random street ID
+        int id = rand() % num_streets;
+        
+        // Run the function for that street
+        find_street_ids_from_name(getStreetName(id));
+    }
+}
+
+
+TEST(find_intersection_street_segments) {
+    std::vector<unsigned> expected = { 156479, 156480, 156488 };
+    std::vector<unsigned> actual = find_intersection_street_segments(108421);
+    
+    CHECK(expected == actual);
+}
+
+
+TEST(find_intersection_street_names) {
+    std::vector<std::string> expected(3, "<unknown>");
+    std::vector<std::string> wrong = { "this is wrong", "wrong", "very wrong" };
+    std::vector<std::string> actual = find_intersection_street_names(108817);
+    CHECK(expected == actual);
+    CHECK(wrong != actual);
+    
+    std::vector<std::string> expected2 = { "<unknown>", "Sherway Gardens Road Ramp", "Sherway Gardens Road", "Sherway Gardens Road" };
+    std::vector<std::string> actual2 = find_intersection_street_names(22492);
+    CHECK(expected2 == actual2);
+}
+
+TEST(are_directly_connected) {
+    // Two way
+    CHECK(are_directly_connected(96121, 18899));
+    CHECK(are_directly_connected(18899, 96121));
+    
+    // One way
+    CHECK(are_directly_connected(64452, 64383));
+    CHECK(!are_directly_connected(64383, 64452));
+}
+
+
+
+
+void get_all_streets() {
+    int num_streets = getNumberOfStreets();
+    std::cout << "Total number of streets: " << num_streets << std::endl;
+    std::vector<std::string> street_names(num_streets);
+    for (int i = 0; i < num_streets; ++i) {
+        street_names[i] = getStreetName(i);
+    }
+    
+    std::sort(street_names.begin(), street_names.end());
+    std::cout << "Duplicates:" << std::endl;
+    for (int i = 0; i < num_streets - 1; ++i) {
+        if (street_names[i] == street_names[i + 1]) {
+            std::cout << street_names[i] << std::endl;
+        }
+    }
+}
+
+void get_intersection_street_segments() {
+    unsigned num_intersections = getNumberOfIntersections();
+    for (unsigned i = 0; i < num_intersections; ++i) {
+        std::cout << "Intersection " << i << ": ";
+        for (unsigned j = 0; j < getIntersectionStreetSegmentCount(i); ++j) {
+            StreetSegmentIndex segment = getIntersectionStreetSegment(i, j);
+            std::cout << segment << "(" << getStreetName(getStreetSegmentInfo(segment).streetID) << "), ";
+        }
+        std::cout << std::endl;
+    }
+}
+
+void get_all_street_segments() {
+    int num_segments = getNumberOfStreetSegments();
+    std::cout << "Total number of street segments: " << num_segments << std::endl;
+    
+    for (int i = 0; i < num_segments; ++i) {
+        StreetSegmentInfo info = getStreetSegmentInfo(i);
+        std::cout << info.from << " -> " << info.to << " ";
+        std::cout << (info.oneWay ? "one way" : "two way") << std::endl;
+    }
+}
+
+

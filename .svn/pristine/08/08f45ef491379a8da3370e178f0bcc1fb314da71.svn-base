@@ -1,0 +1,73 @@
+#include <vector>
+
+#ifndef M3_H
+#define M3_H
+
+/*To do: finish BFS
+ * Set up graph correctly - all the nodes have access to all OUTGOING edges, all edges have the two nodes
+ * Work on BFS path- make sure we're updating reaching edge for adjacent node, 
+ * Work on trackback - tbd 
+ */
+
+struct Edge {
+    unsigned edgeID;
+    
+    unsigned to;
+    unsigned from;
+    
+    bool oneWay;
+    
+    double travel_time;
+    
+    Edge(unsigned ss_id, unsigned node_id){
+        auto info = getStreetSegmentInfo(ss_id);
+        
+        if (info.from == node_id)
+            to = info.to;
+        else
+            to = info.from;
+        
+        travel_time = find_street_segment_travel_time(ss_id);
+    }
+};
+
+struct Node {
+    IntersectionIndex node_id;
+    std::vector<Edge*> outgoing_edges; // Outgoing edges etc. 
+    StreetSegmentIndex reachingEdge; // ID of the edge used to reach this node
+    double total_travel_time = FLT_MAX;
+    
+    //constructor
+    Node(IntersectionIndex intersection_id){
+        
+        node_id = intersection_id;
+        reachingEdge = -1;
+        
+        for (int i = 0; i < getIntersectionStreetSegmentCount(i); i++){
+            StreetSegmentIndex ss_id = getIntersectionStreetSegment(intersection_id, i); 
+            
+            auto info = getStreetSegmentInfo(ss_id);
+                        
+            if(info.from == node_id){ //check if edge is outgoing
+                Edge* edgePtr = new Edge(ss_id, node_id);
+                outgoing_edges.push_back(edgePtr);
+            }
+        }
+    }
+};
+
+
+struct WaveElem {
+    Node* node;
+    unsigned edgeID; // ID of edge used to reach this node
+
+    WaveElem(Node *n, unsigned id) {
+        node = n;
+        edgeID = id;
+    }
+};
+
+void set_up_graph();
+
+#endif /* M3_H */
+

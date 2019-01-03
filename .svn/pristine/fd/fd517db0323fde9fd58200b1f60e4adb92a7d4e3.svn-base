@@ -1,0 +1,99 @@
+#include <vector>
+
+#ifndef M3_H
+#define M3_H
+
+#define NO_EDGE -1
+
+/*To do: finish BFS
+ * Set up graph correctly - all the nodes have access to all OUTGOING edges, all edges have the two nodes
+ * Work on BFS path- make sure we're updating reaching edge for adjacent node, 
+ * Work on trackback - tbd 
+ */
+
+//TO DO:
+// 1. add const to const members
+// 2. move edge and nodes to a separate file
+
+
+struct Edge {
+    unsigned edge_id;
+    
+    unsigned to;
+    unsigned from;
+    
+    double travel_time;
+    
+    Edge(unsigned ss_id){
+        edge_id = ss_id;
+        
+        auto info = getStreetSegmentInfo(ss_id);
+        to = info.to;
+        from = info.from;
+        
+        travel_time = find_street_segment_travel_time(ss_id);
+    }
+    
+    unsigned getToNode(unsigned node_id){
+        return node_id == from? to: from;
+    }
+
+};
+
+struct Node {
+    
+    unsigned node_id;
+    
+    std::vector<unsigned> outgoing_edges; // Outgoing edge ids 
+    
+    int reachingEdge = NO_EDGE; // ID of the edge used to reach this node
+    
+    double travel_time = FLT_MAX;
+    
+    //constructor
+    Node(unsigned intersection_id){
+        
+        node_id = intersection_id;
+        
+        for (int i = 0; i < getIntersectionStreetSegmentCount(intersection_id); i++){
+            StreetSegmentIndex ss_id = getIntersectionStreetSegment(intersection_id, i); 
+            auto info = getStreetSegmentInfo(ss_id);
+            
+            if (info.oneWay == false || info.from == intersection_id) // check for outgoing edges
+                outgoing_edges.push_back(ss_id);
+        }
+    }
+    
+    void restore(){
+        reachingEdge = NO_EDGE;
+        travel_time = FLT_MAX;
+    }
+};
+
+
+struct WaveElem {
+    Node* node;
+    unsigned edgeID; // ID of edge used to reach this node
+    double travel_time;
+
+    WaveElem(Node *n, unsigned id) {
+        node = n;
+        edgeID = id;
+    }
+};
+
+void set_up_graph();
+void check_graph_setup();
+bool bfsPath (Node* starting_node, unsigned destID) ;
+std::vector<unsigned> bfsTraceBack(int destID);
+
+void draw_test_path(std::vector<unsigned> path);
+void collect_curve_points_for_street_segment2(unsigned ss_id) ;
+void collect_street_segments2(std::vector<unsigned> path) ;
+
+void free_node_list();
+void free_edge_list();
+void restore_node_info();
+
+#endif /* M3_H */
+
